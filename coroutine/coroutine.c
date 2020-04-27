@@ -156,10 +156,10 @@ coroutine_resume(struct schedule * S, int id) {
 	switch(status) {
 	case COROUTINE_READY:
 		getcontext(&C->ctx);
-		C->ctx.uc_stack.ss_sp = S->stack;
-		C->ctx.uc_stack.ss_size = STACK_SIZE;
-		C->ctx.uc_link = &S->main;
-		C->status = COROUTINE_RUNNING;
+		C->ctx.uc_stack.ss_sp = S->stack;		// here is the question that blocks my idea, the question is, the implementation and execution of get_context is a black-box,
+		C->ctx.uc_stack.ss_size = STACK_SIZE;	// what I could get, is from observing and then make a conclusion.
+		C->ctx.uc_link = &S->main;				// At least I should know the component of stack frame, to make sure
+		C->status = COROUTINE_RUNNING;			// how it works.
 		S->running = id;
 		uintptr_t ptr = (uintptr_t)S;
 		makecontext(&C->ctx, (void (*)(void)) mainfunc, 2, (uint32_t)ptr, (uint32_t)(ptr>>32));  // make the running coroutine context of mainfunc
@@ -178,12 +178,10 @@ coroutine_resume(struct schedule * S, int id) {
 
 static void
 _save_stack(struct coroutine *C, char *top) {
-	// because of the assignment of C->ctx.uc_stack.ss_sp = S->stack, the local variable is also associated with the stack.
-	// so no need to worry about the S->stack is allocated at heap, and dummy variable is allocated by stack space.
-	char dummy = 0;				
-	assert(top - &dummy <= STACK_SIZE);
-	if (C->cap < top - &dummy) {
-		free(C->stack);
+	char dummy = 0;							// because of the assignment of C->ctx.uc_stack.ss_sp = S->stack, 
+	assert(top - &dummy <= STACK_SIZE);		// the local variable is also associated with the stack.
+	if (C->cap < top - &dummy) {			// so no need to worry about the S->stack is allocated at heap,
+		free(C->stack);						// and dummy variable is allocated at stack space.
 		C->cap = top-&dummy;
 		C->stack = malloc(C->cap);
 	}
