@@ -12,6 +12,30 @@
 	#include <ucontext.h>
 #endif 
 
+/*
+ * 			The key to understand the implementation is, to get a fully understanding of 
+ *  		getcontext, makecontext, and swapcontext.
+ * 
+ *  		Abstraction of these function:
+ 			void makecontext(ucontext_t *ucp, void (*func)(), int argc, ...);
+			int swapcontext(ucontext_t *oucp, const ucontext_t *ucp);
+			
+			The  makecontext()  function  modifies the context pointed to by ucp (which was obtained from a
+			call to getcontext(3)).  Before invoking makecontext(), the caller must allocate  a  new  stack
+			for  this  context  and assign its address to ucp->uc_stack, and define a successor context and
+			assign its address to ucp->uc_link.
+
+			When this context is later activated (using setcontext(3) or swapcontext()) the  function  func
+			is  called,  and passed the series of integer (int) arguments that follow argc; the caller must
+			specify the number of these arguments in argc.  When this function returns, the successor  con‐
+			text is activated.  If the successor context pointer is NULL, the thread exits.
+
+			The  swapcontext()  function saves the current context in the structure pointed to by oucp, and
+			then activates the context pointed to by ucp.
+ * 
+ * 	
+ */
+
 #define STACK_SIZE (1024*1024)
 #define DEFAULT_COROUTINE 16
 
@@ -95,7 +119,7 @@ coroutine_new(struct schedule *S, coroutine_func func, void *ud) {
 	} else {
 		int i;
 		for (i=0;i<S->cap;i++) {
-			int id = (i+S->nco) % S->cap;		// from the circle-array to find the free slot
+			int id = (i+S->nco) % S->cap;
 			if (S->co[id] == NULL) {
 				S->co[id] = co;
 				++S->nco;
@@ -123,8 +147,8 @@ mainfunc(uint32_t low32, uint32_t hi32) {
 
 void 
 coroutine_resume(struct schedule * S, int id) {
-	assert(S->running == -1);			// make sure there can't be two coroutine are running at the same time
-	assert(id >= 0 && id < S->cap);		// make sure the coroutine id is valid
+	assert(S->running == -1);
+	assert(id >= 0 && id < S->cap);		
 	struct coroutine *C = S->co[id];
 	if (C == NULL)
 		return;
@@ -138,8 +162,8 @@ coroutine_resume(struct schedule * S, int id) {
 		C->status = COROUTINE_RUNNING;
 		S->running = id;
 		uintptr_t ptr = (uintptr_t)S;
-		makecontext(&C->ctx, (void (*)(void)) mainfunc, 2, (uint32_t)ptr, (uint32_t)(ptr>>32));		// compatible consideration
-		swapcontext(&S->main, &C->ctx);
+		makecontext(&C->ctx, (void (*)(void)) mainfunc, 2, (uint32_t)ptr, (uint32_t)(ptr>>32));  // make the running coroutine context of mainfunc
+		swapcontext(&S->main, &C->ctx);							// switch to the running coroutine context
 		break;
 	case COROUTINE_SUSPEND:
 		memcpy(S->stack + STACK_SIZE - C->size, C->stack, C->size);
@@ -154,7 +178,9 @@ coroutine_resume(struct schedule * S, int id) {
 
 static void
 _save_stack(struct coroutine *C, char *top) {
-	char dummy = 0;
+	// because of the assignment of C->ctx.uc_stack.ss_sp = S->stack, the local variable is also associated with the stack.
+	// so no need to worry about the S->stack is allocated at heap, and dummy variable is allocated by stack space.
+	char dummy = 0;				
 	assert(top - &dummy <= STACK_SIZE);
 	if (C->cap < top - &dummy) {
 		free(C->stack);
