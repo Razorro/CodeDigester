@@ -105,6 +105,8 @@ coroutine_close(struct schedule *S) {
 	free(S);
 }
 
+// separate the coroutine underlying data, just return the related
+// coroutine id to caller, api design principle get
 int 
 coroutine_new(struct schedule *S, coroutine_func func, void *ud) {
 	struct coroutine *co = _co_new(S, func , ud);
@@ -144,7 +146,11 @@ mainfunc(uint32_t low32, uint32_t hi32) {
 	S->running = -1;
 }
 
-
+// here is just simply swap the user level execute context, 
+// although we can launch several threads with individual attached scheduler,
+// but when we meet some heavy computation, thread is getting blocked, those
+// appended coroutine in this thread cannot get flexibly adjusted to 
+// other threads, here the goroutine is a good example.
 void 
 coroutine_resume(struct schedule * S, int id) {
 	assert(S->running == -1);
